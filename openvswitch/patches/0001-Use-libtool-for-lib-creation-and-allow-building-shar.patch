@@ -1,0 +1,528 @@
+From feb7a7b3b33ec8aa88b1ca489506c654a28f6dab Mon Sep 17 00:00:00 2001
+From: Helmut Schaa <helmut.schaa@googlemail.com>
+Date: Wed, 27 Nov 2013 09:49:55 +0100
+Subject: [PATCH] Use libtool for lib creation and allow building shared libs
+
+Currently openvswitch builds all libraries static only. However,
+libopenvswitch is linked into nearly all openvswitch executables
+making it hardly possible to run openvswitch on embedded devices
+(for example running OpenWrt).
+
+Convert openvswitch to use libtool for building its internal libs.
+This allows "--enable-shared" and "--enable-static" as configure
+arguments. Default is "--disable-shared" thus keeping the current
+behavior with the only change that static libs are installed by
+"make install".
+
+Here's a quick size comparison (x86_64):
+
+Using static libs (*.a removed):
+ovs_static> find -type f -executable | grep -v scripts | grep -v ".la" | xargs du -ch
+7.5M    ./sbin/ovs-vswitchd
+44K     ./sbin/ovs-bugtool
+4.6M    ./sbin/ovsdb-server
+1.0M    ./bin/ovs-benchmark
+60K     ./bin/ovs-dpctl-top
+1.7M    ./bin/ovsdb-client
+5.1M    ./bin/ovs-vsctl
+8.0K    ./bin/ovs-test
+1.1M    ./bin/ovs-appctl
+4.0K    ./bin/ovs-pcap
+4.0M    ./bin/ovs-ofctl
+1.8M    ./bin/ovsdb-tool
+16K     ./bin/ovs-pki
+3.8M    ./bin/ovs-dpctl
+4.0K    ./bin/ovs-parse-backtrace
+4.0K    ./bin/ovs-l3ping
+2.0M    ./bin/vtep-ctl
+4.0K    ./bin/ovs-tcpundump
+33M     total
+
+Using shared libs:
+ovs_shared> find -type f -executable | grep -v scripts | grep -v ".la" | xargs du -ch
+128K    ./lib64/libsflow.so.0.0.0
+644K    ./lib64/libovsdb.so.0.0.0
+6.2M    ./lib64/libopenvswitch.so.0.0.0
+1.8M    ./lib64/libofproto.so.0.0.0
+408K    ./sbin/ovs-vswitchd
+44K     ./sbin/ovs-bugtool
+132K    ./sbin/ovsdb-server
+52K     ./bin/ovs-benchmark
+60K     ./bin/ovs-dpctl-top
+100K    ./bin/ovsdb-client
+296K    ./bin/ovs-vsctl
+8.0K    ./bin/ovs-test
+28K     ./bin/ovs-appctl
+4.0K    ./bin/ovs-pcap
+252K    ./bin/ovs-ofctl
+60K     ./bin/ovsdb-tool
+16K     ./bin/ovs-pki
+112K    ./bin/ovs-dpctl
+4.0K    ./bin/ovs-parse-backtrace
+4.0K    ./bin/ovs-l3ping
+264K    ./bin/vtep-ctl
+4.0K    ./bin/ovs-tcpundump
+11M     total
+
+Conflicts:
+	tests/automake.mk
+	vtep/automake.mk
+
+Signed-off-by: Helmut Schaa <helmut.schaa@googlemail.com>
+---
+ Makefile.am           |  2 +-
+ configure.ac          |  1 +
+ lib/automake.mk       | 36 ++++++++++++++++--------------
+ ofproto/automake.mk   |  8 ++++---
+ ovsdb/automake.mk     | 12 +++++-----
+ tests/automake.mk     | 62 +++++++++++++++++++++++++--------------------------
+ utilities/automake.mk | 18 +++++++--------
+ vswitchd/automake.mk  |  6 ++---
+ 8 files changed, 76 insertions(+), 69 deletions(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index 5b9e0ac..f09abe6 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -83,7 +83,7 @@ MAN_FRAGMENTS =
+ MAN_ROOTS =
+ noinst_DATA =
+ noinst_HEADERS =
+-noinst_LIBRARIES =
++lib_LTLIBRARIES =
+ noinst_man_MANS =
+ noinst_PROGRAMS =
+ noinst_SCRIPTS =
+diff --git a/configure.ac b/configure.ac
+index 09a7f54..7f43975 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -20,6 +20,7 @@ AC_CONFIG_AUX_DIR([build-aux])
+ AC_CONFIG_HEADERS([config.h])
+ AC_CONFIG_TESTDIR([tests])
+ AM_INIT_AUTOMAKE
++LT_INIT([disable-shared])
+ 
+ AC_PROG_CC
+ AM_PROG_CC_C_O
+diff --git a/lib/automake.mk b/lib/automake.mk
+index 92cfc13..a35b48b 100644
+--- a/lib/automake.mk
++++ b/lib/automake.mk
+@@ -5,9 +5,11 @@
+ # notice and this notice are preserved.  This file is offered as-is,
+ # without warranty of any kind.
+ 
+-noinst_LIBRARIES += lib/libopenvswitch.a
++lib_LTLIBRARIES += lib/libopenvswitch.la
+ 
+-lib_libopenvswitch_a_SOURCES = \
++lib_libopenvswitch_la_LIBADD = $(SSL_LIBS)
++
++lib_libopenvswitch_la_SOURCES = \
+ 	lib/aes128.c \
+ 	lib/aes128.h \
+ 	lib/async-append.h \
+@@ -229,28 +231,28 @@ lib_libopenvswitch_a_SOURCES = \
+ 	lib/vswitch-idl.c \
+ 	lib/vswitch-idl.h
+ 
+-nodist_lib_libopenvswitch_a_SOURCES = \
++nodist_lib_libopenvswitch_la_SOURCES = \
+ 	lib/dirs.c
+-CLEANFILES += $(nodist_lib_libopenvswitch_a_SOURCES)
++CLEANFILES += $(nodist_lib_libopenvswitch_la_SOURCES)
+ 
+-noinst_LIBRARIES += lib/libsflow.a
+-lib_libsflow_a_SOURCES = \
++lib_LTLIBRARIES += lib/libsflow.la
++lib_libsflow_la_SOURCES = \
+ 	lib/sflow_api.h \
+ 	lib/sflow.h \
+ 	lib/sflow_agent.c \
+ 	lib/sflow_sampler.c \
+ 	lib/sflow_poller.c \
+ 	lib/sflow_receiver.c
+-lib_libsflow_a_CFLAGS = $(AM_CFLAGS)
++lib_libsflow_la_CFLAGS = $(AM_CFLAGS)
+ if HAVE_WNO_UNUSED
+-lib_libsflow_a_CFLAGS += -Wno-unused
++lib_libsflow_la_CFLAGS += -Wno-unused
+ endif
+ if HAVE_WNO_UNUSED_PARAMETER
+-lib_libsflow_a_CFLAGS += -Wno-unused-parameter
++lib_libsflow_la_CFLAGS += -Wno-unused-parameter
+ endif
+ 
+ if LINUX_DATAPATH
+-lib_libopenvswitch_a_SOURCES += \
++lib_libopenvswitch_la_SOURCES += \
+ 	lib/dpif-linux.c \
+ 	lib/dpif-linux.h \
+ 	lib/netdev-linux.c \
+@@ -267,18 +269,18 @@ lib_libopenvswitch_a_SOURCES += \
+ endif
+ 
+ if HAVE_POSIX_AIO
+-lib_libopenvswitch_a_SOURCES += lib/async-append-aio.c
++lib_libopenvswitch_la_SOURCES += lib/async-append-aio.c
+ else
+-lib_libopenvswitch_a_SOURCES += lib/async-append-null.c
++lib_libopenvswitch_la_SOURCES += lib/async-append-null.c
+ endif
+ 
+ if ESX
+-lib_libopenvswitch_a_SOURCES += \
++lib_libopenvswitch_la_SOURCES += \
+         lib/route-table-stub.c
+ endif
+ 
+ if HAVE_IF_DL
+-lib_libopenvswitch_a_SOURCES += \
++lib_libopenvswitch_la_SOURCES += \
+ 	lib/netdev-bsd.c \
+ 	lib/rtbsd.c \
+ 	lib/rtbsd.h \
+@@ -286,8 +288,8 @@ lib_libopenvswitch_a_SOURCES += \
+ endif
+ 
+ if HAVE_OPENSSL
+-lib_libopenvswitch_a_SOURCES += lib/stream-ssl.c
+-nodist_lib_libopenvswitch_a_SOURCES += lib/dhparams.c
++lib_libopenvswitch_la_SOURCES += lib/stream-ssl.c
++nodist_lib_libopenvswitch_la_SOURCES += lib/dhparams.c
+ lib/dhparams.c: lib/dh1024.pem lib/dh2048.pem lib/dh4096.pem
+ 	(echo '#include "lib/dhparams.h"' &&				\
+ 	 openssl dhparam -C -in $(srcdir)/lib/dh1024.pem -noout &&	\
+@@ -296,7 +298,7 @@ lib/dhparams.c: lib/dh1024.pem lib/dh2048.pem lib/dh4096.pem
+ 	| sed 's/\(get_dh[0-9]*\)()/\1(void)/' > lib/dhparams.c.tmp
+ 	mv lib/dhparams.c.tmp lib/dhparams.c
+ else
+-lib_libopenvswitch_a_SOURCES += lib/stream-nossl.c
++lib_libopenvswitch_la_SOURCES += lib/stream-nossl.c
+ endif
+ 
+ EXTRA_DIST += \
+diff --git a/ofproto/automake.mk b/ofproto/automake.mk
+index 47ca1b8..9e7a2c7 100644
+--- a/ofproto/automake.mk
++++ b/ofproto/automake.mk
+@@ -5,8 +5,8 @@
+ # notice and this notice are preserved.  This file is offered as-is,
+ # without warranty of any kind.
+ 
+-noinst_LIBRARIES += ofproto/libofproto.a
+-ofproto_libofproto_a_SOURCES = \
++lib_LTLIBRARIES += ofproto/libofproto.la
++ofproto_libofproto_la_SOURCES = \
+ 	ofproto/collectors.c \
+ 	ofproto/collectors.h \
+ 	ofproto/connmgr.c \
+@@ -41,10 +41,12 @@ ofproto_libofproto_a_SOURCES = \
+ 	ofproto/pinsched.h \
+ 	ofproto/tunnel.c \
+ 	ofproto/tunnel.h
++ofproto_libofproto_la_CFLAGS = $(AM_CFLAGS)
++ofproto_libofproto_la_LIBADD = lib/libsflow.la
+ 
+ # Distribute this generated file in order not to require Python at
+ # build time if ofproto/ipfix.xml is not modified.
+-ofproto_libofproto_a_SOURCES += ofproto/ipfix-entities.def
++ofproto_libofproto_la_SOURCES += ofproto/ipfix-entities.def
+ 
+ BUILT_SOURCES += ofproto/ipfix-entities.def
+ 
+diff --git a/ovsdb/automake.mk b/ovsdb/automake.mk
+index 3884d3f..764eb6c 100644
+--- a/ovsdb/automake.mk
++++ b/ovsdb/automake.mk
+@@ -1,6 +1,6 @@
+ # libovsdb
+-noinst_LIBRARIES += ovsdb/libovsdb.a
+-ovsdb_libovsdb_a_SOURCES = \
++lib_LTLIBRARIES += ovsdb/libovsdb.la
++ovsdb_libovsdb_la_SOURCES = \
+ 	ovsdb/column.c \
+ 	ovsdb/column.h \
+ 	ovsdb/condition.c \
+@@ -29,6 +29,8 @@ ovsdb_libovsdb_a_SOURCES = \
+ 	ovsdb/trigger.h \
+ 	ovsdb/transaction.c \
+ 	ovsdb/transaction.h
++ovsdb_libovsdb_la_CFLAGS = $(AM_CFLAGS)
++
+ MAN_FRAGMENTS += \
+ 	ovsdb/remote-active.man \
+ 	ovsdb/remote-passive.man
+@@ -36,7 +38,7 @@ MAN_FRAGMENTS += \
+ # ovsdb-tool
+ bin_PROGRAMS += ovsdb/ovsdb-tool
+ ovsdb_ovsdb_tool_SOURCES = ovsdb/ovsdb-tool.c
+-ovsdb_ovsdb_tool_LDADD = ovsdb/libovsdb.a lib/libopenvswitch.a $(SSL_LIBS)
++ovsdb_ovsdb_tool_LDADD = ovsdb/libovsdb.la lib/libopenvswitch.la $(SSL_LIBS)
+ # ovsdb-tool.1
+ man_MANS += ovsdb/ovsdb-tool.1
+ DISTCLEANFILES += ovsdb/ovsdb-tool.1
+@@ -45,7 +47,7 @@ MAN_ROOTS += ovsdb/ovsdb-tool.1.in
+ # ovsdb-client
+ bin_PROGRAMS += ovsdb/ovsdb-client
+ ovsdb_ovsdb_client_SOURCES = ovsdb/ovsdb-client.c
+-ovsdb_ovsdb_client_LDADD = ovsdb/libovsdb.a lib/libopenvswitch.a $(SSL_LIBS)
++ovsdb_ovsdb_client_LDADD = ovsdb/libovsdb.la lib/libopenvswitch.la $(SSL_LIBS)
+ # ovsdb-client.1
+ man_MANS += ovsdb/ovsdb-client.1
+ DISTCLEANFILES += ovsdb/ovsdb-client.1
+@@ -54,7 +56,7 @@ MAN_ROOTS += ovsdb/ovsdb-client.1.in
+ # ovsdb-server
+ sbin_PROGRAMS += ovsdb/ovsdb-server
+ ovsdb_ovsdb_server_SOURCES = ovsdb/ovsdb-server.c
+-ovsdb_ovsdb_server_LDADD = ovsdb/libovsdb.a lib/libopenvswitch.a $(SSL_LIBS)
++ovsdb_ovsdb_server_LDADD = ovsdb/libovsdb.la lib/libopenvswitch.la $(SSL_LIBS)
+ # ovsdb-server.1
+ man_MANS += ovsdb/ovsdb-server.1
+ DISTCLEANFILES += ovsdb/ovsdb-server.1
+diff --git a/tests/automake.mk b/tests/automake.mk
+index f15dcf5..77691dc 100644
+--- a/tests/automake.mk
++++ b/tests/automake.mk
+@@ -177,96 +177,96 @@ $(srcdir)/package.m4: $(top_srcdir)/configure.ac
+ 
+ noinst_PROGRAMS += tests/test-aes128
+ tests_test_aes128_SOURCES = tests/test-aes128.c
+-tests_test_aes128_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_aes128_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-atomic
+ tests_test_atomic_SOURCES = tests/test-atomic.c
+-tests_test_atomic_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_atomic_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-bundle
+ tests_test_bundle_SOURCES = tests/test-bundle.c
+-tests_test_bundle_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_bundle_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-classifier
+ tests_test_classifier_SOURCES = tests/test-classifier.c
+-tests_test_classifier_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_classifier_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-csum
+ tests_test_csum_SOURCES = tests/test-csum.c
+-tests_test_csum_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_csum_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-file_name
+ tests_test_file_name_SOURCES = tests/test-file_name.c
+-tests_test_file_name_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_file_name_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-flows
+ tests_test_flows_SOURCES = tests/test-flows.c
+-tests_test_flows_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_flows_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ dist_check_SCRIPTS = tests/flowgen.pl
+ 
+ noinst_PROGRAMS += tests/test-hash
+ tests_test_hash_SOURCES = tests/test-hash.c
+-tests_test_hash_LDADD = lib/libopenvswitch.a
++tests_test_hash_LDADD = lib/libopenvswitch.la
+ 
+ noinst_PROGRAMS += tests/test-heap
+ tests_test_heap_SOURCES = tests/test-heap.c
+-tests_test_heap_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_heap_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-hindex
+ tests_test_hindex_SOURCES = tests/test-hindex.c
+-tests_test_hindex_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_hindex_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-hmap
+ tests_test_hmap_SOURCES = tests/test-hmap.c
+-tests_test_hmap_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_hmap_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-json
+ tests_test_json_SOURCES = tests/test-json.c
+-tests_test_json_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_json_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-jsonrpc
+ tests_test_jsonrpc_SOURCES = tests/test-jsonrpc.c
+-tests_test_jsonrpc_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_jsonrpc_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-list
+ tests_test_list_SOURCES = tests/test-list.c
+-tests_test_list_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_list_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-lockfile
+ tests_test_lockfile_SOURCES = tests/test-lockfile.c
+-tests_test_lockfile_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_lockfile_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-multipath
+ tests_test_multipath_SOURCES = tests/test-multipath.c
+-tests_test_multipath_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_multipath_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-packets
+ tests_test_packets_SOURCES = tests/test-packets.c
+-tests_test_packets_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_packets_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-random
+ tests_test_random_SOURCES = tests/test-random.c
+-tests_test_random_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_random_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-stp
+ tests_test_stp_SOURCES = tests/test-stp.c
+-tests_test_stp_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_stp_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-sflow
+ tests_test_sflow_SOURCES = tests/test-sflow.c
+-tests_test_sflow_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_sflow_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-netflow
+ tests_test_netflow_SOURCES = tests/test-netflow.c
+-tests_test_netflow_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_netflow_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-unix-socket
+ tests_test_unix_socket_SOURCES = tests/test-unix-socket.c
+-tests_test_unix_socket_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_unix_socket_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-odp
+ tests_test_odp_SOURCES = tests/test-odp.c
+-tests_test_odp_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_odp_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-ovsdb
+ tests_test_ovsdb_SOURCES = \
+@@ -274,7 +274,7 @@ tests_test_ovsdb_SOURCES = \
+ 	tests/idltest.c \
+ 	tests/idltest.h
+ EXTRA_DIST += tests/uuidfilt.pl tests/ovsdb-monitor-sort.pl
+-tests_test_ovsdb_LDADD = ovsdb/libovsdb.a lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_ovsdb_LDADD = ovsdb/libovsdb.la lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ # idltest schema and IDL
+ OVSIDL_BUILT += tests/idltest.c tests/idltest.h tests/idltest.ovsidl
+@@ -288,15 +288,15 @@ tests/idltest.c: tests/idltest.h
+ 
+ noinst_PROGRAMS += tests/test-reconnect
+ tests_test_reconnect_SOURCES = tests/test-reconnect.c
+-tests_test_reconnect_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_reconnect_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-sha1
+ tests_test_sha1_SOURCES = tests/test-sha1.c
+-tests_test_sha1_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_sha1_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-timeval
+ tests_test_timeval_SOURCES = tests/test-timeval.c
+-tests_test_timeval_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_timeval_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-strtok_r
+ tests_test_strtok_r_SOURCES = tests/test-strtok_r.c
+@@ -306,19 +306,19 @@ tests_test_type_props_SOURCES = tests/test-type-props.c
+ 
+ noinst_PROGRAMS += tests/test-util
+ tests_test_util_SOURCES = tests/test-util.c
+-tests_test_util_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_util_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-uuid
+ tests_test_uuid_SOURCES = tests/test-uuid.c
+-tests_test_uuid_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_uuid_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-vconn
+ tests_test_vconn_SOURCES = tests/test-vconn.c
+-tests_test_vconn_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++tests_test_vconn_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += tests/test-byte-order
+ tests_test_byte_order_SOURCES = tests/test-byte-order.c
+-tests_test_byte_order_LDADD = lib/libopenvswitch.a
++tests_test_byte_order_LDADD = lib/libopenvswitch.la
+ 
+ # Python tests.
+ CHECK_PYFILES = \
+diff --git a/utilities/automake.mk b/utilities/automake.mk
+index ff50a34..ff615d7 100644
+--- a/utilities/automake.mk
++++ b/utilities/automake.mk
+@@ -99,35 +99,35 @@ man_MANS += \
+ dist_man_MANS += utilities/ovs-ctl.8
+ 
+ utilities_ovs_appctl_SOURCES = utilities/ovs-appctl.c
+-utilities_ovs_appctl_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++utilities_ovs_appctl_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ utilities_ovs_controller_SOURCES = utilities/ovs-controller.c
+-utilities_ovs_controller_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++utilities_ovs_controller_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ utilities_ovs_dpctl_SOURCES = utilities/ovs-dpctl.c
+-utilities_ovs_dpctl_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++utilities_ovs_dpctl_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ utilities_ovs_ofctl_SOURCES = utilities/ovs-ofctl.c
+ utilities_ovs_ofctl_LDADD = \
+-	ofproto/libofproto.a \
+-	lib/libopenvswitch.a \
++	ofproto/libofproto.la \
++	lib/libopenvswitch.la \
+ 	$(SSL_LIBS)
+ 
+ utilities_ovs_vsctl_SOURCES = utilities/ovs-vsctl.c
+-utilities_ovs_vsctl_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++utilities_ovs_vsctl_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ if LINUX_DATAPATH
+ sbin_PROGRAMS += utilities/ovs-vlan-bug-workaround
+ utilities_ovs_vlan_bug_workaround_SOURCES = utilities/ovs-vlan-bug-workaround.c
+-utilities_ovs_vlan_bug_workaround_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++utilities_ovs_vlan_bug_workaround_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ noinst_PROGRAMS += utilities/nlmon
+ utilities_nlmon_SOURCES = utilities/nlmon.c
+-utilities_nlmon_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++utilities_nlmon_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ endif
+ 
+ bin_PROGRAMS += utilities/ovs-benchmark
+ utilities_ovs_benchmark_SOURCES = utilities/ovs-benchmark.c
+-utilities_ovs_benchmark_LDADD = lib/libopenvswitch.a $(SSL_LIBS)
++utilities_ovs_benchmark_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+ 
+ include utilities/bugtool/automake.mk
+diff --git a/vswitchd/automake.mk b/vswitchd/automake.mk
+index 3a271c6..6ef1b86 100644
+--- a/vswitchd/automake.mk
++++ b/vswitchd/automake.mk
+@@ -12,9 +12,9 @@ vswitchd_ovs_vswitchd_SOURCES = \
+ 	vswitchd/xenserver.c \
+ 	vswitchd/xenserver.h
+ vswitchd_ovs_vswitchd_LDADD = \
+-	ofproto/libofproto.a \
+-	lib/libsflow.a \
+-	lib/libopenvswitch.a \
++	ofproto/libofproto.la \
++	lib/libsflow.la \
++	lib/libopenvswitch.la \
+ 	$(SSL_LIBS)
+ EXTRA_DIST += vswitchd/INTERNALS
+ MAN_ROOTS += vswitchd/ovs-vswitchd.8.in
+-- 
+1.8.1.4
+

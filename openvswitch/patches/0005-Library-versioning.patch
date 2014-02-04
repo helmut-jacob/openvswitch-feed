@@ -1,0 +1,28 @@
+From 23fa2c422859bced15ea74b558a966e42c342266 Mon Sep 17 00:00:00 2001
+From: Helmut Schaa <helmut.schaa@googlemail.com>
+Date: Wed, 4 Dec 2013 09:14:20 +0100
+Subject: [PATCH] Library versioning
+
+
+Signed-off-by: Helmut Schaa <helmut.schaa@googlemail.com>
+---
+ Makefile.am | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/Makefile.am b/Makefile.am
+index f09abe6..13ffe74 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -22,6 +22,9 @@ AM_CPPFLAGS += -DNDEBUG
+ AM_CFLAGS += -fomit-frame-pointer
+ endif
+ 
++AM_LDFLAGS = -version-info $(subst .,:,$(VERSION))
++ 
++
+ # PYTHONDONTWRITEBYTECODE=yes keeps Python from creating .pyc and .pyo
+ # files.  Creating .py[co] works OK for any given version of Open
+ # vSwitch, but it causes trouble if you switch from a version with
+-- 
+1.8.1.4
+

@@ -1,0 +1,13 @@
+diff --git a/lib/ovs-atomic.h b/lib/ovs-atomic.h
+index a9ae4ae..1a65e8d 100644
+--- a/lib/ovs-atomic.h
++++ b/lib/ovs-atomic.h
+@@ -240,8 +240,6 @@
+         #include "ovs-atomic-c11.h"
+     #elif __has_extension(c_atomic)
+         #include "ovs-atomic-clang.h"
+-    #elif __GNUC__ >= 4 && __GNUC_MINOR__ >= 7
+-        #include "ovs-atomic-gcc4.7+.h"
+     #elif HAVE_GCC4_ATOMICS
+         #include "ovs-atomic-gcc4+.h"
+     #else

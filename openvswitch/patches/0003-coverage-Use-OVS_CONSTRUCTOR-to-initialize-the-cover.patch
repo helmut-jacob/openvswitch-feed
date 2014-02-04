@@ -1,0 +1,129 @@
+From 692cf24c26ebc2779fa3e264e452fe36fdac3507 Mon Sep 17 00:00:00 2001
+From: Helmut Schaa <helmut.schaa@googlemail.com>
+Date: Tue, 10 Dec 2013 12:18:13 +0100
+Subject: [PATCH 3/4] coverage: Use OVS_CONSTRUCTOR to initialize the coverage
+ counter array
+
+Use a static array in coverage.c that gets initialized by constructor
+functions per coverage definition.
+
+Signed-off-by: Helmut Schaa <helmut.schaa@googlemail.com>
+---
+ lib/coverage.c | 44 +++++++++++++-------------------------------
+ lib/coverage.h | 21 +++++++--------------
+ 2 files changed, 20 insertions(+), 45 deletions(-)
+
+diff --git a/lib/coverage.c b/lib/coverage.c
+index c7a0028..debff9f 100644
+--- a/lib/coverage.c
++++ b/lib/coverage.c
+@@ -29,37 +29,9 @@
+ VLOG_DEFINE_THIS_MODULE(coverage);
+ 
+ /* The coverage counters. */
+-#if USE_LINKER_SECTIONS
+-extern struct coverage_counter *__start_coverage[];
+-extern struct coverage_counter *__stop_coverage[];
+-#define coverage_counters __start_coverage
+-#define n_coverage_counters  (__stop_coverage - __start_coverage)
+-#else  /* !USE_LINKER_SECTIONS */
+-#define COVERAGE_COUNTER(COUNTER)                                       \
+-        DECLARE_EXTERN_PER_THREAD_DATA(unsigned int,                    \
+-                                       counter_##COUNTER);              \
+-        DEFINE_EXTERN_PER_THREAD_DATA(counter_##COUNTER, 0);            \
+-        static unsigned int COUNTER##_count(void)                       \
+-        {                                                               \
+-            unsigned int *countp = counter_##COUNTER##_get();           \
+-            unsigned int count = *countp;                               \
+-            *countp = 0;                                                \
+-            return count;                                               \
+-        }                                                               \
+-        extern struct coverage_counter counter_##COUNTER;               \
+-        struct coverage_counter counter_##COUNTER                       \
+-            = { #COUNTER, COUNTER##_count, 0 };
+-#include "coverage.def"
+-#undef COVERAGE_COUNTER
+-
+-extern struct coverage_counter *coverage_counters[];
+-struct coverage_counter *coverage_counters[] = {
+-#define COVERAGE_COUNTER(NAME) &counter_##NAME,
+-#include "coverage.def"
+-#undef COVERAGE_COUNTER
+-};
+-#define n_coverage_counters ARRAY_SIZE(coverage_counters)
+-#endif  /* !USE_LINKER_SECTIONS */
++static struct coverage_counter **coverage_counters = NULL;
++static unsigned int n_coverage_counters = 0;
++static unsigned int allocated_coverage_counters = 0;
+ 
+ static struct ovs_mutex coverage_mutex = OVS_MUTEX_INITIALIZER;
+ 
+@@ -73,6 +45,17 @@ static void coverage_read(struct svec *);
+ static unsigned int coverage_array_sum(const unsigned int *arr,
+                                        const unsigned int len);
+ 
++/* Registers a coverage counter with the coverage core */
++void
++coverage_counter_register(struct coverage_counter* counter)
++{
++    if (n_coverage_counters >= allocated_coverage_counters)
++    coverage_counters = x2nrealloc(coverage_counters,
++                                   &allocated_coverage_counters,
++                                   sizeof(struct coverage_counter*));
++    coverage_counters[n_coverage_counters++] = counter;
++}
++
+ static void
+ coverage_unixctl_show(struct unixctl_conn *conn, int argc OVS_UNUSED,
+                      const char *argv[] OVS_UNUSED, void *aux OVS_UNUSED)
+diff --git a/lib/coverage.h b/lib/coverage.h
+index 4e6c050..bf8bbd1 100644
+--- a/lib/coverage.h
++++ b/lib/coverage.h
+@@ -29,6 +29,8 @@
+ 
+ #include "ovs-thread.h"
+ #include "vlog.h"
++#include "util.h"
++#include "compiler.h"
+ 
+ /* Makes coverage_run run every 5000 ms (5 seconds).
+  * If this value is redefined, the new value must
+@@ -54,9 +56,10 @@ struct coverage_counter {
+     unsigned int hr[HR_AVG_LEN];
+ };
+ 
++void coverage_counter_register(struct coverage_counter*);
++
+ /* Defines COUNTER.  There must be exactly one such definition at file scope
+  * within a program. */
+-#if USE_LINKER_SECTIONS
+ #define COVERAGE_DEFINE(COUNTER)                                        \
+         DEFINE_STATIC_PER_THREAD_DATA(unsigned int,                     \
+                                       counter_##COUNTER, 0);            \
+@@ -74,19 +77,9 @@ struct coverage_counter {
+         extern struct coverage_counter counter_##COUNTER;               \
+         struct coverage_counter counter_##COUNTER                       \
+             = { #COUNTER, COUNTER##_count, 0 };                         \
+-        extern struct coverage_counter *counter_ptr_##COUNTER;          \
+-        struct coverage_counter *counter_ptr_##COUNTER                  \
+-            __attribute__((section("coverage"))) = &counter_##COUNTER
+-#else
+-#define COVERAGE_DEFINE(COUNTER)                                        \
+-        DECLARE_EXTERN_PER_THREAD_DATA(unsigned int,                    \
+-                                       counter_##COUNTER);              \
+-        static inline void COUNTER##_add(unsigned int n)                \
+-        {                                                               \
+-            *counter_##COUNTER##_get() += n;                            \
+-        }                                                               \
+-        extern struct coverage_counter counter_##COUNTER
+-#endif
++        OVS_CONSTRUCTOR(COUNTER##_init) {                               \
++            coverage_counter_register(&counter_##COUNTER);              \
++        }
+ 
+ /* Adds 1 to COUNTER. */
+ #define COVERAGE_INC(COUNTER) COVERAGE_ADD(COUNTER, 1)
+-- 
+1.8.1.4
+

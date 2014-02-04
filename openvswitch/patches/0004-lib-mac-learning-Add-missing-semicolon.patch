@@ -1,0 +1,29 @@
+From 770013c4bb7204b04727cd9415e092b425c604b8 Mon Sep 17 00:00:00 2001
+From: Helmut Schaa <helmut.schaa@googlemail.com>
+Date: Mon, 9 Dec 2013 14:38:58 +0100
+Subject: [PATCH 4/6] lib/mac-learning: Add missing semicolon
+
+Does not matter as long as ovs_assert is a simple macro but if ovs_assert
+is converted to a function this will fail.
+
+Signed-off-by: Helmut Schaa <helmut.schaa@googlemail.com>
+---
+ lib/mac-learning.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/mac-learning.c b/lib/mac-learning.c
+index fe06744..c9c1ae9 100644
+--- a/lib/mac-learning.c
++++ b/lib/mac-learning.c
+@@ -290,7 +290,7 @@ mac_learning_lookup(const struct mac_learning *ml,
+     } else {
+         struct mac_entry *e = mac_entry_lookup(ml, dst, vlan);
+ 
+-        ovs_assert(e == NULL || e->port.p != NULL)
++        ovs_assert(e == NULL || e->port.p != NULL);
+         return e;
+     }
+ }
+-- 
+1.8.1.4
+

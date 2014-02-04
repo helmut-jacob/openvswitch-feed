@@ -1,0 +1,44 @@
+From 2a4b26dd0383381525ff1f27d8b0c7c734306e45 Mon Sep 17 00:00:00 2001
+From: Helmut Schaa <helmut.schaa@googlemail.com>
+Date: Mon, 9 Dec 2013 11:36:30 +0100
+Subject: [PATCH 1/6] libopenvswitch: Add OVS_PACKED to dhcp header struct
+
+Does not fix any specific error but seems more correct to prevent
+issues in the future.
+
+Signed-off-by: Helmut Schaa <helmut.schaa@googlemail.com>
+---
+ lib/dhcp.h | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/lib/dhcp.h b/lib/dhcp.h
+index 6f97298..c4e1fe1 100644
+--- a/lib/dhcp.h
++++ b/lib/dhcp.h
+@@ -20,12 +20,14 @@
+ #include <stdint.h>
+ #include "packets.h"
+ #include "util.h"
++#include "compiler.h"
+ 
+ /* Ports used by DHCP. */
+ #define DHCP_SERVER_PORT        67       /* Port used by DHCP server. */
+ #define DHCP_CLIENT_PORT        68       /* Port used by DHCP client. */
+ 
+ #define DHCP_HEADER_LEN 236
++OVS_PACKED(
+ struct dhcp_header {
+     uint8_t op;                 /* DHCP_BOOTREQUEST or DHCP_BOOTREPLY. */
+     uint8_t htype;              /* ARP_HRD_ETHERNET (typically). */
+@@ -42,7 +44,7 @@ struct dhcp_header {
+     char sname[64];             /* Optional server host name. */
+     char file[128];             /* Boot file name. */
+     /* Followed by variable-length options field. */
+-};
++});
+ BUILD_ASSERT_DECL(DHCP_HEADER_LEN == sizeof(struct dhcp_header));
+ 
+ #endif /* dhcp.h */
+-- 
+1.8.1.4
+

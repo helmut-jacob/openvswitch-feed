@@ -1,0 +1,39 @@
+From 7f0ed08f11beaeb32dfb3ba546e0131bd7d348d5 Mon Sep 17 00:00:00 2001
+From: Helmut Schaa <helmut.schaa@googlemail.com>
+Date: Tue, 10 Dec 2013 11:19:59 +0100
+Subject: [PATCH 1/4] compiler: Add OVS_CONSTRUCTOR to mark functions as init
+ functions
+
+Functions marked with OVS_CONSTRUCTOR are called unconditionally
+before main.
+
+Signed-off-by: Helmut Schaa <helmut.schaa@googlemail.com>
+---
+ lib/compiler.h | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/lib/compiler.h b/lib/compiler.h
+index 0dbacbf..daca32d 100644
+--- a/lib/compiler.h
++++ b/lib/compiler.h
+@@ -179,4 +179,17 @@
+ #define OVS_PACKED(DECL) __pragma(pack(push, 1)) DECL __pragma(pack(pop))
+ #endif
+ 
++#ifdef _MSC_VER
++#define CCALL __cdecl
++#pragma section(".CRT$XCU",read)
++#define OVS_CONSTRUCTOR(f) \
++    static void __cdecl f(void); \
++    __declspec(allocate(".CRT$XCU")) void (__cdecl*f##_)(void) = f; \
++    static void __cdecl f(void)
++#else
++#define OVS_CONSTRUCTOR(f) \
++    static void f(void) __attribute__((constructor)); \
++    static void f(void)
++#endif
++
+ #endif /* compiler.h */
+-- 
+1.8.1.4
+

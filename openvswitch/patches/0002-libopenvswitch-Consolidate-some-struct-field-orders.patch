@@ -1,0 +1,70 @@
+From b1b8161652a96aa38969a2c8a73139f8b1a329d0 Mon Sep 17 00:00:00 2001
+From: Helmut Schaa <helmut.schaa@googlemail.com>
+Date: Mon, 9 Dec 2013 13:41:28 +0100
+Subject: [PATCH 2/6] libopenvswitch: Consolidate some struct field orders
+
+Avoid holes in structs by moving "small" members together.
+
+Signed-off-by: Helmut Schaa <helmut.schaa@googlemail.com>
+---
+ lib/ofp-actions.h | 2 +-
+ lib/ofp-util.h    | 8 ++++----
+ 2 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/lib/ofp-actions.h b/lib/ofp-actions.h
+index 470a371..00cba6a 100644
+--- a/lib/ofp-actions.h
++++ b/lib/ofp-actions.h
+@@ -494,9 +494,9 @@ struct ofpact_learn {
+     uint16_t idle_timeout;      /* Idle time before discarding (seconds). */
+     uint16_t hard_timeout;      /* Max time before discarding (seconds). */
+     uint16_t priority;          /* Priority level of flow entry. */
++    uint8_t table_id;           /* Table to insert flow entry. */
+     uint64_t cookie;            /* Cookie for new flow. */
+     enum ofputil_flow_mod_flags flags;
+-    uint8_t table_id;           /* Table to insert flow entry. */
+     uint16_t fin_idle_timeout;  /* Idle timeout after FIN, if nonzero. */
+     uint16_t fin_hard_timeout;  /* Hard timeout after FIN, if nonzero. */
+ 
+diff --git a/lib/ofp-util.h b/lib/ofp-util.h
+index fef85e0..fe747ce 100644
+--- a/lib/ofp-util.h
++++ b/lib/ofp-util.h
+@@ -321,11 +321,11 @@ struct ofputil_flow_stats {
+     struct match match;
+     ovs_be64 cookie;
+     uint8_t table_id;
+-    uint32_t duration_sec;
+-    uint32_t duration_nsec;
+     uint16_t priority;
+     uint16_t idle_timeout;
+     uint16_t hard_timeout;
++    uint32_t duration_sec;
++    uint32_t duration_nsec;
+     int idle_age;               /* Seconds since last packet, -1 if unknown. */
+     int hard_age;               /* Seconds since last change, -1 if unknown. */
+     uint64_t packet_count;      /* Packet count, UINT64_MAX if unknown. */
+@@ -359,8 +359,8 @@ enum ofperr ofputil_decode_aggregate_stats_reply(
+ /* Flow removed message, independent of protocol. */
+ struct ofputil_flow_removed {
+     struct match match;
+-    uint16_t priority;
+     ovs_be64 cookie;
++    uint16_t priority;
+     uint8_t reason;             /* One of OFPRR_*. */
+     uint8_t table_id;           /* 255 if message didn't include table ID. */
+     uint32_t duration_sec;
+@@ -770,9 +770,9 @@ struct ofputil_flow_update {
+     uint16_t idle_timeout;
+     uint16_t hard_timeout;
+     uint8_t table_id;
++    uint16_t priority;
+     ovs_be64 cookie;
+     struct match *match;
+-    uint16_t priority;
+     struct ofpact *ofpacts;
+     size_t ofpacts_len;
+ 
+-- 
+1.8.1.4
+

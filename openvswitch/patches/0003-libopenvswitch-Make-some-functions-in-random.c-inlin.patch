@@ -1,0 +1,86 @@
+From 42e780f30c83ac8aa7562d8af2868e83af1942d8 Mon Sep 17 00:00:00 2001
+From: Helmut Schaa <helmut.schaa@googlemail.com>
+Date: Mon, 9 Dec 2013 13:47:09 +0100
+Subject: [PATCH 3/6] libopenvswitch: Make some functions in random.c inline
+
+random_range, random_uint8 and random_uint16 are basically just wrappers
+around random_uint32. Hence, don't export these functions so the compiler
+can be smarter when it comes to optimizations.
+
+Signed-off-by: Helmut Schaa <helmut.schaa@googlemail.com>
+---
+ lib/random.c | 17 -----------------
+ lib/random.h | 21 ++++++++++++++++++---
+ 2 files changed, 18 insertions(+), 20 deletions(-)
+
+diff --git a/lib/random.c b/lib/random.c
+index d6f7d9d..c0bc659 100644
+--- a/lib/random.c
++++ b/lib/random.c
+@@ -86,17 +86,6 @@ random_bytes(void *p_, size_t n)
+     }
+ }
+ 
+-uint8_t
+-random_uint8(void)
+-{
+-    return random_uint32();
+-}
+-
+-uint16_t
+-random_uint16(void)
+-{
+-    return random_uint32();
+-}
+ 
+ uint32_t
+ random_uint32(void)
+@@ -117,12 +106,6 @@ random_uint64(void)
+     return x;
+ }
+ 
+-int
+-random_range(int max)
+-{
+-    return random_uint32() % max;
+-}
+-
+ static uint32_t
+ random_next(void)
+ {
+diff --git a/lib/random.h b/lib/random.h
+index eaac143..5fe50b7 100644
+--- a/lib/random.h
++++ b/lib/random.h
+@@ -24,10 +24,25 @@ void random_init(void);
+ void random_set_seed(uint32_t);
+ 
+ void random_bytes(void *, size_t);
+-uint8_t random_uint8(void);
+-uint16_t random_uint16(void);
+ uint32_t random_uint32(void);
+ uint64_t random_uint64(void);
+-int random_range(int max);
++
++static inline int
++random_range(int max)
++{
++    return random_uint32() % max;
++}
++
++static inline uint8_t
++random_uint8(void)
++{
++    return random_uint32();
++}
++
++static inline uint16_t
++random_uint16(void)
++{
++    return random_uint32();
++}
+ 
+ #endif /* random.h */
+-- 
+1.8.1.4
+
